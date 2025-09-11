@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Clock, Coins, TrendingUp, Users, Wallet, AlertTriangle, Award } from 'lucide-react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import useApprove from "./hooks/useApprove"
 import useStake from "./hooks/useStake"
 import { parseUnits } from 'viem';
@@ -7,53 +8,82 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import useEmergencyWithdraw from "./hooks/useEmergencyWithdraw";
 import useWithdraw from "./hooks/useWithdraw";
 import useClaimRewards from "./hooks/useClaimRewards";
+import useUserDetails from "./hooks/useUserDetails";
+import useTokenBalance from "./hooks/useTokenBalance";
+import useProtocolStats from "./hooks/useProtocolStats";
+import LandingPage from './pages/LandingPage';
+import { useAccount } from 'wagmi';
+import { toast } from 'sonner';
 
-const App = () => {
+const Dashboard = () => {
   const [stakeAmount, setStakeAmount] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
 
+  const { address } = useAccount();
   const { approve } = useApprove();
   const { stake } = useStake();
   const { emergencyWithdraw } = useEmergencyWithdraw();
   const { withdraw } = useWithdraw();  
   const { claimRewards } = useClaimRewards();
-  // Mock data - replace with actual data from your hooks
-  const mockData = {
-    userStake: '1,250.50',
-    pendingRewards: '45.75',
-    timeUntilUnlock: '2d 14h 32m',
-    canWithdraw: false,
-    currentApr: '12.5%',
-    totalStaked: '2,450,000',
-    rewardRate: '8.75%',
-    userBalance: '5,000.00'
+  
+  // Get real-time user details from smart contract
+  const { userDetails, error: userDetailsError, isLoading: userDetailsLoading } = useUserDetails(address);
+  
+  // Get real-time token balance
+  const { balance, error: balanceError, isLoading: balanceLoading } = useTokenBalance(address);
+  
+  // Get protocol stats
+  const { apr, totalStaked, rewardRate, errors: protocolErrors, loading: protocolLoading } = useProtocolStats();
+  
+  // Process user details data or use fallback values
+  const userData = {
+    userStake: userDetails?.stakedAmount ? userDetails.stakedAmount.toString() : '0',
+    pendingRewards: userDetails?.pendingRewards ? userDetails.pendingRewards.toString() : '0',
+    timeUntilUnlock: userDetails?.timeUntilUnlock ? userDetails.timeUntilUnlock.toString() : '0',
+    canWithdraw: userDetails?.canWithdraw || false,
+    currentApr: apr ? apr.toString() : '0',
+    totalStaked: totalStaked ? totalStaked.toString() : '0',
+    rewardRate: rewardRate ? rewardRate.toString() : '0',
+    userBalance: balance ? balance.toString() : '0'
   };
+  
+  // Combined loading and error states
+  const isLoading = userDetailsLoading || balanceLoading || protocolLoading.apr || protocolLoading.totalStaked;
+  const error = userDetailsError || balanceError || protocolErrors.apr || protocolErrors.totalStaked;
 
   const handleStake = async () => {
     if (!stakeAmount || parseFloat(stakeAmount) <= 0) {
+        toast.error('Please enter a valid amount to stake');
         return;
     }
     try {
         const amountInWei = parseUnits(stakeAmount, 18);
+        toast.loading('Staking tokens...', { id: 'stake' });
         await stake(amountInWei);
+        toast.success(`Successfully staked ${stakeAmount} tokens!`, { id: 'stake' });
         setStakeAmount('');
     } catch (error) {
         console.error('Stake process failed:', error);
+        toast.error('Failed to stake tokens. Please try again.', { id: 'stake' });
     }
 };
 
 
   const handleApprove = async () => {
     if (!stakeAmount || parseFloat(stakeAmount) <= 0) {
+        toast.error('Please enter a valid amount to approve');
         return;
     }
     try {
         const amountInWei = parseUnits(stakeAmount, 18);
+        toast.loading('Approving tokens...', { id: 'approve' });
         await approve(amountInWei);
+        toast.success(`Successfully approved ${stakeAmount} tokens!`, { id: 'approve' });
         setStakeAmount('');
         
     } catch (error) {
-        console.error('Stake process failed:', error);
+        console.error('Approve process failed:', error);
+        toast.error('Failed to approve tokens. Please try again.', { id: 'approve' });
     } finally {
     }
 };
@@ -103,6 +133,24 @@ const handleClaimRewards = async () => {
       </nav>
 
       <div className="max-w-5xl mx-auto px-6 py-6">
+        {isLoading && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+            <div className="flex items-center text-sm text-blue-700">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-700 mr-2"></div>
+              Loading user data...
+            </div>
+          </div>
+        )}
+        
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+            <div className="flex items-center text-sm text-red-700">
+              <AlertTriangle className="w-4 h-4 mr-2" />
+              Error loading user data: {error.message}
+            </div>
+          </div>
+        )}
+        
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* Left Column - Actions */}
@@ -129,7 +177,7 @@ const handleClaimRewards = async () => {
                       className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     />
                     <div className="absolute right-3 top-2.5 text-xs text-gray-400">
-                      Balance: {mockData.userBalance}
+                      Balance: {userData.userBalance}
                     </div>
                   </div>
                 </div>
@@ -169,14 +217,14 @@ const handleClaimRewards = async () => {
                     onChange={(e) => setWithdrawAmount(e.target.value)}
                     placeholder="0.00"
                     className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-50 disabled:text-gray-400"
-                    disabled={!mockData.canWithdraw}
+                    disabled={!userData.canWithdraw}
                   />
                 </div>
                 
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     onClick={handleWithdraw}
-                    disabled={!mockData.canWithdraw}
+                    disabled={!userData.canWithdraw}
                     className="bg-blue-50 hover:bg-blue-100 disabled:bg-gray-50 text-blue-700 disabled:text-gray-400 text-xs font-medium py-2 px-3 rounded-md transition-colors"
                   >
                     Withdraw
@@ -213,12 +261,12 @@ const handleClaimRewards = async () => {
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Staked</span>
-                  <span className="text-xs font-medium text-gray-900">{mockData.userStake}</span>
+                  <span className="text-xs font-medium text-gray-900">{userData.userStake}</span>
                 </div>
                 
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Rewards</span>
-                  <span className="text-xs font-medium text-green-600">{mockData.pendingRewards}</span>
+                  <span className="text-xs font-medium text-green-600">{userData.pendingRewards}</span>
                 </div>
                 
                 <div className="flex justify-between items-center">
@@ -226,13 +274,13 @@ const handleClaimRewards = async () => {
                     <Clock className="w-2.5 h-2.5 mr-0.5" />
                     Unlock
                   </span>
-                  <span className="text-xs font-medium text-orange-600">{mockData.timeUntilUnlock}</span>
+                  <span className="text-xs font-medium text-orange-600">{userData.timeUntilUnlock}</span>
                 </div>
                 
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Status</span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${mockData.canWithdraw ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {mockData.canWithdraw ? 'Unlocked' : 'Locked'}
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${userData.canWithdraw ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    {userData.canWithdraw ? 'Unlocked' : 'Locked'}
                   </span>
                 </div>
               </div>
@@ -248,17 +296,17 @@ const handleClaimRewards = async () => {
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">APR</span>
-                  <span className="text-xs font-medium text-blue-600">{mockData.currentApr}</span>
+                  <span className="text-xs font-medium text-blue-600">{userData.currentApr}</span>
                 </div>
                 
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Total Staked</span>
-                  <span className="text-xs font-medium text-gray-900">{mockData.totalStaked}</span>
+                  <span className="text-xs font-medium text-gray-900">{userData.totalStaked}</span>
                 </div>
                 
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Rate</span>
-                  <span className="text-xs font-medium text-purple-600">{mockData.rewardRate}</span>
+                  <span className="text-xs font-medium text-purple-600">{userData.rewardRate}</span>
                 </div>
               </div>
             </div>
@@ -279,6 +327,28 @@ const handleClaimRewards = async () => {
         </div>
       </div>
     </div>
+  );
+};
+
+const App = () => {
+  const { isConnected } = useAccount();
+  const location = useLocation();
+
+  // Handle wallet connection-based routing
+  if (isConnected && location.pathname === '/') {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  if (!isConnected && location.pathname !== '/') {
+    return <Navigate to="/" replace />;
+  }
+
+  return (
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="*" element={<Navigate to={isConnected ? "/dashboard" : "/"} replace />} />
+    </Routes>
   );
 };
 

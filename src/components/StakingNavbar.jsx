@@ -1,22 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount } from "wagmi";
-import { useNavigate } from "react-router";
 
 const StakingNavbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { isConnected } = useAccount(); 
-  const navigate = useNavigate();
-
-  // Redirect based on wallet connection status
-  useEffect(() => {
-    if (isConnected) {
-      navigate("/dashboard");
-    } else {
-      navigate("/");
-    }
-  }, [isConnected, navigate]);
 
   const navItems = ["Staking Dashboard", "Stake Positions", "Protocol Stats"];
 
