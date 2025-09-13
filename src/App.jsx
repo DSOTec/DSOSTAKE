@@ -59,7 +59,8 @@ const Dashboard = () => {
     try {
         const amountInWei = parseUnits(stakeAmount, 18);
         toast.loading('Staking tokens...', { id: 'stake' });
-        await stake(amountInWei);
+        const tx = await stake(amountInWei);
+        await tx.wait(); // Wait for transaction confirmation
         toast.success(`Successfully staked ${stakeAmount} tokens!`, { id: 'stake' });
         setStakeAmount('');
     } catch (error) {
@@ -90,14 +91,19 @@ const Dashboard = () => {
 
 const handleWithdraw = async () => {
   if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
+      toast.error('Please enter a valid amount to withdraw');
       return;
   }
   try {
       const amountInWei = parseUnits(withdrawAmount, 18);
-      await withdraw(amountInWei);
+      toast.loading('Withdrawing tokens...', { id: 'withdraw' });
+      const tx = await withdraw(amountInWei);
+      await tx.wait(); // Wait for transaction confirmation
+      toast.success(`Successfully withdrawn ${withdrawAmount} tokens!`, { id: 'withdraw' });
       setWithdrawAmount('');
   } catch (error) {
       console.error('Withdraw process failed:', error);
+      toast.error('Failed to withdraw tokens. Please try again.', { id: 'withdraw' });
   }
 };
 
@@ -111,9 +117,13 @@ const handleClaimRewards = async () => {
 
   const handleEmergencyWithdraw = async () => {
     try {
-        await emergencyWithdraw();
+        toast.loading('Processing emergency withdrawal...', { id: 'emergency' });
+        const tx = await emergencyWithdraw();
+        await tx.wait(); // Wait for transaction confirmation
+        toast.success('Emergency withdrawal successful!', { id: 'emergency' });
     } catch (error) {
         console.error('Emergency withdrawal failed:', error);
+        toast.error('Emergency withdrawal failed. Please try again.', { id: 'emergency' });
     }
 };
 
@@ -177,7 +187,7 @@ const handleClaimRewards = async () => {
                       className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     />
                     <div className="absolute right-3 top-2.5 text-xs text-gray-400">
-                      Balance: {userData.userBalance}
+                      Balance: {parseFloat(userData.userBalance).toLocaleString()} MTK
                     </div>
                   </div>
                 </div>
